@@ -73,11 +73,11 @@ async def command_start_handler(message: Message) -> None:
     text = f"Привет, {html.bold(message.from_user.full_name)}! 👋\n\n"\
            f"🤖 <b>Crypto-check Bot</b> - твой помощник для отслеживания криптовалют!\n\n"\
            f"📋 <b>Доступные команды:</b>\n"\
-           f"• /checkCrypto - получить текущую цену BTC\n"\
+           f"• /checkCrypto - получить текущую цену BTC в евро\n"\
            f"• /start_updates - включить автообновления цены\n"\
            f"• /stop_updates - отключить автообновления\n"\
            f"• /status - статус ваших подписок\n\n"\
-           f"🔔 <i>Автообновления показывают цену в реальном времени!</i>"
+           f"🔔 <i>Автообновления показывают цену BTC/EUR в реальном времени!</i>"
     await message.answer(text, parse_mode=ParseMode.HTML)
 
 @dp.message(Command('checkCrypto'))
@@ -87,9 +87,9 @@ async def check_crypto_handler(message: Message) -> None:
         formatted_price = f"{price_data['price']:,.2f}"
         if price_data["last_update"]:
             update_time = datetime.fromtimestamp(price_data["last_update"]).strftime("%H:%M:%S")
-            text = f"💰 <b>BTC/USDT</b>: ${formatted_price}\n📊 Данные получены через WebSocket Binance\n🔄 Последнее обновление: {update_time}"
+            text = f"💰 <b>BTC/EUR</b>: €{formatted_price}\n📊 Данные получены через WebSocket Binance\n🔄 Последнее обновление: {update_time}"
         else:
-            text = f"💰 <b>BTC/USDT</b>: ${formatted_price}\n📊 Данные получены через WebSocket Binance"
+            text = f"💰 <b>BTC/EUR</b>: €{formatted_price}\n📊 Данные получены через WebSocket Binance"
         await message.answer(text, parse_mode=ParseMode.HTML)
     else:
         await message.answer("⏳ Цена еще загружается, попробуйте через несколько секунд...")
@@ -150,7 +150,7 @@ async def status_handler(message: Message) -> None:
            f"Ваш статус: {status}\n"\
            f"Детали: {message_info}\n\n"\
            f"👥 Всего активных пользователей: {total_users}\n"\
-           f"💰 Цена BTC: ${price_data['price']:,.2f}" if price_data['price'] else "💰 Цена загружается..."
+           f"💰 Цена BTC: €{price_data['price']:,.2f}" if price_data['price'] else "💰 Цена загружается..."
     
     await message.answer(text, parse_mode=ParseMode.HTML)
 
@@ -178,7 +178,7 @@ async def admin_stats_handler(message: Message) -> None:
            f"📡 <b>WebSocket статус:</b>\n"\
            f"• Соединение: {connection_status}\n"\
            f"• Последнее обновление: {last_update}\n"\
-           f"• Текущая цена: ${price_data['price']:,.2f}" if price_data['price'] else "• Цена: Загружается..."
+           f"• Текущая цена: €{price_data['price']:,.2f}" if price_data['price'] else "• Цена: Загружается..."
     
     await message.answer(text, parse_mode=ParseMode.HTML)
 
@@ -216,7 +216,7 @@ async def update_user_message(chat_id):
     try:
         formatted_price = f"{price_data['price']:,.2f}"
         update_time = datetime.fromtimestamp(price_data["last_update"]).strftime("%H:%M:%S")
-        text = f"💰 <b>BTC/USDT</b>: ${formatted_price}\n🔄 Обновлено: {update_time} (Реальное время)"
+        text = f"💰 <b>BTC/EUR</b>: €{formatted_price}\n🔄 Обновлено: {update_time} (Реальное время)"
         
         if active_users[chat_id]["message_id"] is None:
             # Отправляем новое сообщение
@@ -270,11 +270,11 @@ async def update_all_users():
 
 async def get_price():
     """Получение цены BTC через WebSocket Binance с автоматическим переподключением"""
-    uri = "wss://stream.binance.com:9443/ws/btcusdt@ticker"
+    uri = "wss://stream.binance.com:9443/ws/btceur@ticker"  # Изменено на BTC/EUR
     while True:
         try:
             async with websockets.connect(uri) as websocket:
-                logging.info("WebSocket connected to Binance")
+                logging.info("WebSocket connected to Binance (BTC/EUR)")
                 async for message in websocket:
                     data = json.loads(message)
                     new_price = float(data['c'])
@@ -284,7 +284,7 @@ async def get_price():
                     price_data["price"] = new_price
                     price_data["last_update"] = current_time
                     
-                    logging.debug(f"Updated price: {new_price}")
+                    logging.debug(f"Updated BTC/EUR price: {new_price}")
                     
                     # Обновляем сообщения для всех активных пользователей
                     await update_all_users()
