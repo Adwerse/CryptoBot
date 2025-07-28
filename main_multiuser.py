@@ -73,7 +73,7 @@ def load_users_data():
                     "message_id": None,  # Сбрасываем message_id после перезапуска
                     "active": user_data.get("active", False),
                     "crypto": user_data.get("crypto", "BTC"),  # По умолчанию BTC
-                    "last_text": ""  # Добавляем поле для отслеживания последнего текста
+                    "last_price": None  # Добавляем поле для отслеживания последней цены
                 }
         logging.info(f"Loaded {len(saved_data)} users from {USERS_DATA_FILE}")
     except FileNotFoundError:
@@ -146,12 +146,13 @@ async def set_user_crypto(message: Message, crypto: str) -> None:
             "message_id": None, 
             "active": False, 
             "crypto": crypto,
-            "last_text": ""
+            "last_price": None
         }
     else:
         active_users[chat_id]["crypto"] = crypto
-        # Сбрасываем last_text при смене криптовалюты
-        active_users[chat_id]["last_text"] = ""
+        # Сбрасываем last_price при смене криптовалюты
+        active_users[chat_id]["last_price"] = None
+        active_users[chat_id]["message_id"] = None  # Сбрасываем message_id тоже
     
     save_users_data()
     
@@ -201,12 +202,13 @@ async def start_updates_handler(message: Message) -> None:
             "message_id": None, 
             "active": True, 
             "crypto": "BTC",
-            "last_text": ""
+            "last_price": None
         }
     else:
         active_users[chat_id]["active"] = True
-        # Сбрасываем last_text при включении обновлений
-        active_users[chat_id]["last_text"] = ""
+        # Сбрасываем last_price при включении обновлений
+        active_users[chat_id]["last_price"] = None
+        active_users[chat_id]["message_id"] = None  # Сбрасываем message_id тоже
     
     save_users_data()  # Сохраняем изменения
     
@@ -350,6 +352,10 @@ async def update_user_message(chat_id):
         crypto_info = SUPPORTED_CRYPTOS[user_crypto]
         new_text = f"💰 <b>{user_crypto}/EUR</b>: €{formatted_price}\n🔄 Обновлено: {update_time} (Реальное время)"
         
+        # Проверяем, изменилась ли цена (а не время)
+        last_price = active_users[chat_id].get("last_price", None)
+        current_price = price_data[user_crypto]["price"]
+        
         if active_users[chat_id]["message_id"] is None:
             # Отправляем новое сообщение
             msg = await bot.send_message(
@@ -358,29 +364,40 @@ async def update_user_message(chat_id):
                 parse_mode=ParseMode.HTML
             )
             active_users[chat_id]["message_id"] = msg.message_id
-            active_users[chat_id]["last_text"] = new_text  # Сохраняем последний текст
+            active_users[chat_id]["last_price"] = current_price
             logging.info(f"Sent initial price message to {chat_id}")
         else:
-            # Проверяем, изменился ли текст перед обновлением
-            last_text = active_users[chat_id].get("last_text", "")
-            if new_text != last_text:
-                # Обновляем существующее сообщение только если текст изменился
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=active_users[chat_id]["message_id"],
-                    text=new_text,
-                    parse_mode=ParseMode.HTML
-                )
-                active_users[chat_id]["last_text"] = new_text  # Обновляем сохраненный текст
-                logging.debug(f"Updated price message for {chat_id}")
+            # Обновляем только если цена изменилась значительно (более чем на 0.01€)
+            if last_price is None or abs(current_price - last_price) >= 0.01:
+                try:
+                    await bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=active_users[chat_id]["message_id"],
+                        text=new_text,
+                        parse_mode=ParseMode.HTML
+                    )
+                    active_users[chat_id]["last_price"] = current_price
+                    logging.debug(f"Updated price message for {chat_id} (price change: {abs(current_price - (last_price or 0)):.4f}€)")
+                except Exception as edit_error:
+                    # Если не удалось отредактировать, отправляем новое сообщение
+                    if "message to edit not found" in str(edit_error).lower():
+                        msg = await bot.send_message(
+                            chat_id=chat_id,
+                            text=new_text,
+                            parse_mode=ParseMode.HTML
+                        )
+                        active_users[chat_id]["message_id"] = msg.message_id
+                        active_users[chat_id]["last_price"] = current_price
+                        logging.info(f"Sent new price message to {chat_id} (old message not found)")
+                    else:
+                        # Игнорируем ошибку "message is not modified"
+                        if "message is not modified" not in str(edit_error).lower():
+                            logging.error(f"Error editing message for {chat_id}: {edit_error}")
             
     except Exception as e:
-        # Игнорируем ошибку "message is not modified"
-        if "message is not modified" not in str(e).lower():
-            logging.error(f"Error updating message for {chat_id}: {e}")
-        # Если сообщение не найдено, сбрасываем ID
-        if "message to edit not found" in str(e).lower():
-            active_users[chat_id]["message_id"] = None
+        logging.error(f"Error updating message for {chat_id}: {e}")
+        # Если ошибка с отправкой, сбрасываем message_id
+        active_users[chat_id]["message_id"] = None
 
 async def update_all_users():
     """Обновление сообщений для всех активных пользователей"""
