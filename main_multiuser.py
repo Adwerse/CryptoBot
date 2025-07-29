@@ -41,7 +41,7 @@ active_users = {}
 # Константы
 USERS_DATA_FILE = "users_data.json"
 RECONNECTION_DELAY = 5
-UPDATE_FREQUENCY_LIMIT = 3  # секунды между обновлениями
+UPDATE_FREQUENCY_LIMIT = 1  # секунда между обновлениями - реальное время
 
 def save_users_data():
     """Сохранение данных пользователей в файл"""
