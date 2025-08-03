@@ -1,7 +1,7 @@
 # handlers/crypto_handlers.py
 from aiogram import Router, html
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ParseMode
 from config import SUPPORTED_CRYPTOS
 from services.user_service import active_users, save_users_data, get_user

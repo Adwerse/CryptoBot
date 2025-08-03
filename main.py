@@ -26,6 +26,7 @@ async def main():
 
     # Инициализация бота в модуле обновлений
     init_update_bot(bot)
+    portfolio_handlers.init_bot(bot)
 
     # Регистрация роутеров
     dp.include_router(common_handlers.router)

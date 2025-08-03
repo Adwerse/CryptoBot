@@ -1,13 +1,18 @@
-# handlers/portfolio_handlers.py
-from aiogram import Router, html
+import logging
+from aiogram import Router, html, Bot
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.enums import ParseMode
 from config import SUPPORTED_CRYPTOS
 from services.user_service import active_users, save_users_data, get_user
 from services.crypto_service import price_data
 
 router = Router()
+bot: Bot
+
+def init_bot(b: Bot):
+    global bot
+    bot = b
 
 @router.message(Command('portfolio_add'))
 async def portfolio_add_handler(message: Message) -> None:
@@ -95,4 +100,61 @@ async def portfolio_handler(message: Message) -> None:
     text += f"\n----------------------------------\n"
     text += f"💰 <b>Общая стоимость: €{total_value:,.2f}</b>"
     
-    await message.answer(text, parse_mode=ParseMode.HTML)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Обновить", callback_data="update_portfolio")]
+    ])
+    
+    await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+@router.callback_query(lambda c: c.data == 'update_portfolio')
+async def update_portfolio_callback(callback_query: CallbackQuery):
+    """Обработчик для кнопки обновления портфеля"""
+    chat_id = callback_query.message.chat.id
+    message_id = callback_query.message.message_id
+
+    user_data = get_user(chat_id)
+    if not user_data.get("portfolio"):
+        await bot.answer_callback_query(callback_query.id, "📭 Ваш портфель пуст.")
+        return
+
+    portfolio = user_data["portfolio"]
+    total_value = 0
+    text = "💼 <b>Ваш криптовалютный портфель:</b>\n\n"
+
+    for crypto, amount in portfolio.items():
+        current_price = price_data[crypto].get("price")
+        if current_price:
+            value = amount * current_price
+            total_value += value
+            text += f"• <b>{crypto}</b>: {amount} ({SUPPORTED_CRYPTOS[crypto]['symbol']}) - <b>€{value:,.2f}</b>\n"
+        else:
+            text += f"• <b>{crypto}</b>: {amount} ({SUPPORTED_CRYPTOS[crypto]['symbol']}) - <i>Цена загружается...</i>\n"
+    
+    text += f"\n----------------------------------\n"
+    text += f"💰 <b>Общая стоимость: €{total_value:,.2f}</b>"
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Обновить", callback_data="update_portfolio")]
+    ])
+
+    try:
+        # Проверяем, отличается ли новый текст от старого, чтобы избежать ошибки
+        if callback_query.message.text != text:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard
+            )
+            await bot.answer_callback_query(callback_query.id, "Портфель обновлен!")
+        else:
+            await bot.answer_callback_query(callback_query.id, "Цены не изменились.")
+            
+    except Exception as e:
+        # Дополнительно обрабатываем ошибку на случай, если проверка выше не сработает
+        if "message is not modified" in str(e).lower():
+            await bot.answer_callback_query(callback_query.id, "Цены не изменились.")
+        else:
+            logging.error(f"Error updating portfolio for {chat_id}: {e}")
+            await bot.answer_callback_query(callback_query.id, "Не удалось обновить портфель.")
