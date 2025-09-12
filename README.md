@@ -226,8 +226,3 @@ The bot provides comprehensive logging:
 
 <div align="center">
   <p>Made with ❤️ for the crypto community</p>
-  <p>
-    <a href="Adwerse.2005@gmail.com">Report Bug</a> •
-    <a href="Adwerse.2005@gmail.com">Request Feature</a>
-  </p>
-</div>
